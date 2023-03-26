@@ -15,12 +15,12 @@ pub struct NApp {
     builder: tauri::Builder<Wry>,
 }
 
-struct testRpc {
+struct TestRpc {
     height: i32,
     width: i32,
 }
 
-impl NService for testRpc {
+impl NService for TestRpc {
     fn call_method(&self, method: &str, args: &[serde_json::Value]) -> Result<serde_json::Value, rpc::NError> {
         match method {
             "height" => Ok(self.height.into()),
@@ -35,7 +35,7 @@ impl NApp {
     pub fn new() -> NApp {
         let mut server = NServer::new("我是谁");
         // 在这里注册服务（对象）
-        server.register_services("test", Box::new(testRpc {width: 30, height: 40}));
+        server.register_services("test", Box::new(TestRpc {width: 30, height: 40}));
 
         let builder = tauri::Builder::default()
         .manage(server)
