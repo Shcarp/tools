@@ -34,6 +34,8 @@ const pages = readdirSync(path.resolve(__dirname, "src/page")).reduce(
   [{}, {}]
 );
 
+console.log(pages)
+
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [

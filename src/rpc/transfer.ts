@@ -11,11 +11,11 @@ export class IPCTransfer implements Transfer {
     try {
       const resp = await invoke<NResponse>('recive_message', { request })
       if (resp.id !== request.id)
-        throw new Error()
-
+        throw new Error('Message error')
       return resp
     }
     catch (error) {
+      // eslint-disable-next-line prefer-promise-reject-errors
       return Promise.reject<NResponse>({
         id: request.id,
         result: null,
