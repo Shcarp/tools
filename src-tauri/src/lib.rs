@@ -2,12 +2,12 @@ pub mod rpc;
 pub mod command;
 use rpc::{NServer, NResponse, NService};
 use tauri::{ Wry };
-use crate::command::{greet, recive_message};
+use crate::command::{greet, recive_message, open};
 
 const JUDAGE_SERVICE: &str = "JUDAGE_SERVICE";
 
 #[derive(Clone, serde::Serialize)]
-struct Payload {
+pub struct Payload {
   message: NResponse,
 }
 
@@ -39,22 +39,24 @@ impl NApp {
 
         let builder = tauri::Builder::default()
         .manage(server)
-        .invoke_handler(tauri::generate_handler![greet, recive_message]);
+        .invoke_handler(tauri::generate_handler![greet, recive_message, open]);
         NApp { builder }
     }
 
     pub fn run(self) {
-        self.builder.build(tauri::generate_context!())
-        .unwrap().run(|_app_handle, event | match event {
-            tauri::RunEvent::ExitRequested { api, .. } => {
-                api.prevent_exit();
-              }
-              _ => {}
-        });
+        self.builder
+            .build(tauri::generate_context!())
+            .unwrap()
+            .run(|_app_handle, event | match event {
+                tauri::RunEvent::ExitRequested { api, .. } => {
+                    api.prevent_exit();
+                }
+                _ => {}
+            });
     }
 
     pub fn register_module<T>(mut self, state: T) -> Self 
-    where T: Send + Sync + 'static  
+        where T: Send + Sync + 'static  
     {
         self.builder = self.builder.manage(state);
         return self;

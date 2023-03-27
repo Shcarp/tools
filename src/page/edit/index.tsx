@@ -1,9 +1,18 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-// import "./styles.css";
+import { invoke } from '@tauri-apps/api/tauri'
+import { Button } from 'antd'
+import { run } from '../../entry'
+import type { PageCommonProps } from '../interface'
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <div>111</div>
-  </React.StrictMode>,
-)
+export interface IEditProps {
+  id: string
+}
+
+const Edit: React.FC<IEditProps & PageCommonProps> = () => {
+  return (
+    <Button onClick={async () => {
+      await invoke('open', { name: 'main', args: '111' })
+    }}> open</Button>
+  )
+}
+
+run<IEditProps>(Edit)

@@ -34,12 +34,10 @@ const pages = readdirSync(path.resolve(__dirname, "src/page")).reduce(
   [{}, {}]
 );
 
-console.log(pages)
-
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
   plugins: [
-    eslint(),
+    // eslint(),
     react({ fastRefresh: false }),
     virtualHtmlTemplate({
       pages: pages[0],
