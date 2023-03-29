@@ -1,8 +1,11 @@
 pub mod rpc;
 pub mod command;
+pub mod win;
+
 use rpc::{NServer, NResponse, NService};
 use tauri::{ Wry };
-use crate::command::{greet, recive_message, open};
+use crate::command::{greet, recive_message};
+pub use crate::win::{open, WinState};
 
 const JUDAGE_SERVICE: &str = "JUDAGE_SERVICE";
 
@@ -64,5 +67,6 @@ impl NApp {
 }
 
 pub fn lmian() {
-    NApp::new().run()
+    let mut winstate = WinState::new();
+    NApp::new().register_module(winstate).run()
 }

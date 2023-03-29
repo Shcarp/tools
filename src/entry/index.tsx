@@ -1,13 +1,26 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
+import { appWindow } from '@tauri-apps/api/window'
 import type { PageCommonProps } from '../page/interface'
 
 export function run<T>(Entry: React.FC<T & PageCommonProps>) {
-  const initState = JSON.parse(window.__MY_CUSTOM_PROPERTY__)
+  const Wrap = () => {
+    const [initState, setInitState] = useState<T & PageCommonProps>(JSON.parse(window?.__MY_CUSTOM_PROPERTY__ ?? null))
+    useEffect(() => {
+      const data = JSON.parse(window?.__MY_CUSTOM_PROPERTY__ ?? null)
+      setInitState(data)
+      appWindow.listen('open', (args) => {
+        setInitState(JSON.parse(args?.payload as string ?? '{}'))
+      })
+    }, [])
+    return <>
+      <Entry {...initState}></Entry>
+    </>
+  }
 
   ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
     <React.StrictMode>
-      <Entry {...initState}></Entry>
+      <Wrap />
     </React.StrictMode>,
   )
 }

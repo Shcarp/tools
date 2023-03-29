@@ -16,8 +16,7 @@ export interface IAppProps {
 }
 
 function App(props: IAppProps & PageCommonProps) {
-  const { id, lang } = props
-  console.log(id, lang)
+  console.log(props)
   const getTest = async () => {
     const res = await client.get<TestRemoteObj>('test')
     console.log(await res.height())
