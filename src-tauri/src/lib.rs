@@ -3,7 +3,7 @@ pub mod command;
 pub mod win;
 
 use rpc::{NServer, NResponse, NService};
-use tauri::{ Wry };
+use tauri::{ Wry, async_runtime::Mutex, Manager };
 use crate::command::{greet, recive_message};
 pub use crate::win::{open, WinState};
 
@@ -41,8 +41,16 @@ impl NApp {
         server.register_services("test", Box::new(TestRpc {width: 30, height: 40}));
 
         let builder = tauri::Builder::default()
-        .manage(server)
-        .invoke_handler(tauri::generate_handler![greet, recive_message, open]);
+            .setup(|app| {
+
+                // app.listen_global("", |event| {
+                //     println!("got event-name with payload {:?}", event.payload());
+                //   });
+
+                Ok(())
+            })
+            .manage(server)
+            .invoke_handler(tauri::generate_handler![greet, recive_message, open]);
         NApp { builder }
     }
 
@@ -53,6 +61,19 @@ impl NApp {
             .run(|_app_handle, event | match event {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     api.prevent_exit();
+                }
+                tauri::RunEvent::WindowEvent { label, event, .. } => {
+                    match event {
+                        tauri::WindowEvent::Resized(_) => todo!(),
+                        tauri::WindowEvent::Moved(_) => todo!(),
+                        tauri::WindowEvent::CloseRequested { api , .. } => todo!(),
+                        tauri::WindowEvent::Destroyed => todo!(),
+                        tauri::WindowEvent::Focused(_) => todo!(),
+                        tauri::WindowEvent::ScaleFactorChanged { scale_factor, new_inner_size , .. } => todo!(),
+                        tauri::WindowEvent::FileDrop(_) => todo!(),
+                        tauri::WindowEvent::ThemeChanged(_) => todo!(),
+                        _ => todo!(),
+                    }
                 }
                 _ => {}
             });
@@ -68,5 +89,5 @@ impl NApp {
 
 pub fn lmian() {
     let mut winstate = WinState::new();
-    NApp::new().register_module(winstate).run()
+    NApp::new().register_module(Mutex::new(winstate)).run()
 }
