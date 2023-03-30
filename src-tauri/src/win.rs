@@ -47,21 +47,39 @@ impl Display for NArgs {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WinOptions {
     pub win_type: String,
-    pub overopen: bool,
+    pub overopen: Option<bool>,
     pub url: String,
-    pub position: (f64, f64),
-    pub height: f64,
-    pub width: f64,
-    pub min_width: f64,
-    pub min_height: f64,
-    pub max_width: f64,
-    pub max_height: f64,
-    pub resizable: bool,
-    pub title: String,
-    pub fullscreen: bool,
-    pub focus: bool
+    pub position: Option<(f64, f64)>,
+    pub size: Option<(f64, f64)>,
+    pub min_size: Option<(f64, f64)>,
+    pub max_size: Option<(f64, f64)>,
+    pub resizable: Option<bool>,
+    pub title: Option<String>,
+    pub fullscreen: Option<bool>,
+    pub focus: Option<bool>,
+    pub center: Option<bool>
+}
+
+impl WinOptions {
+    pub fn new(label: String, url: String) -> Self {
+        Self {
+            win_type: label,
+            url: url,
+            overopen: None,
+            position: None,
+            size: None,
+            min_size: None,
+            max_size: None,
+            resizable: None,
+            title: None,
+            fullscreen: None,
+            focus: None,
+            center: None
+        }
+    }
 }
 
 pub struct WinState {
@@ -137,14 +155,8 @@ impl WinState {
     }
 }
 
-#[tauri::command]
-pub async fn register_win(win_state:  State<'_, Mutex<WinState>>, options: WinOptions)-> Result<(), WinError> {
-    let mut win_state = win_state.lock().await;
-    win_state.register(options)
-}
-
 fn new_window(app: &AppHandle, open: &str, label: &str ,options: &WinOptions, args: HashMap<String, Value>) -> Result<(), WinError> {
-    let window = tauri::WindowBuilder::new(
+    let mut window = tauri::WindowBuilder::new(
         app,
         label, /* the unique window label */
         tauri::WindowUrl::App(options.url.to_owned().into())
@@ -157,16 +169,47 @@ fn new_window(app: &AppHandle, open: &str, label: &str ,options: &WinOptions, ar
                     window.__MY_CUSTOM_PROPERTY__ = '{}';
                 }}
             "#, NArgs::new(open, args)).as_str()
-    )
-    .position(options.position.0, options.position.1)
-    .title(options.title.clone())
-    .focused(options.focus)
-    .fullscreen(options.fullscreen)
-    .inner_size(options.width, options.height)
-    .max_inner_size(options.max_width, options.max_height)
-    .min_inner_size(options.min_width, options.min_height)
-    .resizable(options.resizable)
-    .build()
+    );
+
+    if let Some(position) = options.position {
+        window = window.position(position.0, position.1);
+    }
+
+    if let Some(size) = options.size {
+        window = window.inner_size(size.0, size.1);
+    }
+
+    if let Some(max_size) = options.max_size {
+        window = window.max_inner_size(max_size.0, max_size.1);
+    }
+
+    if let Some(min_inner_size) = options.max_size {
+        window = window.max_inner_size(min_inner_size.0, min_inner_size.1);
+    }
+
+    if let Some(ref title) = options.title {
+        window = window.title(title);
+    }
+
+    if let Some(focused) = options.focus {
+        window = window.focused(focused);
+    }
+
+    if let Some(fullscreen) = options.fullscreen {
+        window = window.fullscreen(fullscreen);
+    }
+
+    if let Some(resizable) = options.resizable {
+        window = window.resizable(resizable);
+    }
+
+    if let Some(center) = options.center {
+        if center {
+            window = window.center();
+        }
+    }
+
+    let window = window.build()
         .or_else(|error| {
         println!("{}", error.to_string());
         Err(WinError::OpenWindowFail(label.to_string(), "win build error".to_string()))
@@ -188,29 +231,24 @@ pub async fn open(app: AppHandle, win: Window, label: &str, args: HashMap<String
         return Err(WinError::NotRegister(label.to_string()));
     }
     let options = win_state.get_options_by_type(label).unwrap();
-    if options.overopen {
-        let win_label = format!("{}_{}", label, WIN_COUNT.fetch_add(1, Ordering::Relaxed));
-        new_window(&app, win.label(), &win_label, options, args)?;
-        win_state.open(label)?;
-        return Ok(win_label);
+    if let Some(ref value) = options.overopen {
+        if *value {
+            let win_label = format!("{}_{}", label, WIN_COUNT.fetch_add(1, Ordering::Relaxed));
+            new_window(&app, win.label(), &win_label, options, args)?;
+            win_state.open(label)?;
+            return Ok(win_label);
+        }
     }
 
     if let Some(twin) = app.get_window(label) {
-        if win_state.is_open(label) {
-            twin.emit("open", NArgs::new(win.label(), args))
-                .or_else(|_| {
-                     Err(WinError::OpenWindowFail(label.to_string(), "args error".to_string()))
-                    })?;
-        } else if win_state.is_hide(label) {
-            twin.emit("open", NArgs::new(win.label(), args))
-                .or_else(|_| { 
-                    Err(WinError::OpenWindowFail(label.to_string(), "args error".to_string()))
-                })?;
-                twin.show().or_else(|_| {Err(WinError::OpenWindowFail(label.to_string(), "show error".to_string()))})?;
-                win_state.open(label)?;
-        }
+        twin.emit("open", NArgs::new(win.label(), args))
+        .or_else(|_| {
+             Err(WinError::OpenWindowFail(label.to_string(), "args error".to_string()))
+            })?;
+        win_state.open(label)?;
     } else {
         new_window(&app, win.label(), label, options, args)?;
+        win_state.open(label)?;
     }
     return Ok(label.to_string());
 }

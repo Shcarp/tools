@@ -1,3 +1,3 @@
-module.exports = {
-  extends: ['@mmc-cloud/eslint-config-ts'],
-}
+// module.exports = {
+//   extends: ['@mmc-cloud/eslint-config-ts'],
+// }

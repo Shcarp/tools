@@ -5,6 +5,7 @@ import type { PageCommonProps } from '../interface'
 import { open } from '../../utils'
 import 'antd/dist/reset.css'
 import './App.less'
+import win from '../../win'
 
 interface TestRemoteObj {
   height: () => Promise<number>
@@ -28,7 +29,7 @@ function App(props: IAppProps & PageCommonProps) {
         await getTest()
       }}>FASON</Button>
       <Button onClick={async () => {
-        open('edit', { id: 'edit' })
+        win.open('edit', { id: 'edit' })
       }}>
         Open ediyt
       </Button>
