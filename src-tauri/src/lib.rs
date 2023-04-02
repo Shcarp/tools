@@ -44,13 +44,13 @@ impl NApp {
         server.register_services("test", Box::new(TestRpc {width: 30, height: 40}));
 
         let builder = tauri::Builder::default()
-            .plugin(win::NWindowsPlugin::new())
             .plugin(tauri_plugin_log::Builder::default().targets([
                 LogTarget::LogDir,
                 LogTarget::Stdout,
                 LogTarget::Webview,
                 LogTarget::Folder("log".into())
-            ]).level(LevelFilter::Warn).build())
+            ]).level(LevelFilter::Debug).build())
+            .plugin(win::NWindowsPlugin::new())
             .setup(|app_handle| {
                 let path = app_handle.path_resolver().app_log_dir().unwrap();
                 Ok(())
@@ -67,7 +67,7 @@ impl NApp {
             .run(|_app_handle, event | match event {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     api.prevent_exit();
-                }
+                },
                 _ => {}
             });
     }

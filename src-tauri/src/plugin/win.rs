@@ -1,41 +1,48 @@
-use std::{collections::HashMap, fmt::Display};
-use serde::{Serialize, Deserialize};
+use log::{error, info};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::marker::PhantomPinned;
+use std::sync::{Arc};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tauri::{ async_runtime::Mutex };
-use tauri::{plugin::Plugin, Invoke, Runtime, AppHandle, Window, State, Manager};
+use std::{collections::HashMap, fmt::Display};
+use tauri::async_runtime::Mutex;
+use tauri::{plugin::Plugin, AppHandle, Invoke, Manager, Runtime, State, Window};
 
 static WIN_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, thiserror::Error, Serialize)]
 pub enum WinError {
-  #[error("Options `{0}` is not find")]
-  MissOptions(String),
-  #[error("{0} Already exist")]
-  AlreadyExist(String),
-  #[error("{0} Already open")]
-  AlreadyOpen(String),
-  #[error("{0} Already hide")]
-  AlreadyHide(String),
-  #[error("{0} Not register")]
-  NotRegister(String),
-  #[error("{0} open fail: {1}")]
-  OpenWindowFail(String, String),
-  #[error("{0} close faill: {1}")]
-  CloseWindowFail(String, String),
-  #[error("{0} hide faill: {1}")]
-  HideWindowFail(String, String)
+    #[error("Options `{0}` is not find")]
+    MissOptions(String),
+    #[error("{0} Already exist")]
+    AlreadyExist(String),
+    #[error("{0} Already open")]
+    AlreadyOpen(String),
+    #[error("{0} Already hide")]
+    AlreadyHide(String),
+    #[error("{0} Not register")]
+    NotRegister(String),
+    #[error("{0} open fail: {1}")]
+    OpenWindowFail(String, String),
+    #[error("{0} close faill: {1}")]
+    CloseWindowFail(String, String),
+    #[error("{0} hide faill: {1}")]
+    HideWindowFail(String, String),
 }
 
 #[derive(Serialize, Deserialize)]
 struct NArgs {
     send: String,
-    args: HashMap<String, Value>
+    args: HashMap<String, Value>,
 }
 
 impl NArgs {
     pub fn new(send: &str, args: HashMap<String, Value>) -> String {
-        NArgs {send: send.to_string(), args}.to_string()
+        NArgs {
+            send: send.to_string(),
+            args,
+        }
+        .to_string()
     }
 }
 
@@ -69,7 +76,7 @@ pub struct WinOptions {
     #[serde(default)]
     pub focus: Option<bool>,
     #[serde(default)]
-    pub center: Option<bool>
+    pub center: Option<bool>,
 }
 
 impl WinOptions {
@@ -86,7 +93,7 @@ impl WinOptions {
             title: None,
             fullscreen: None,
             focus: None,
-            center: None
+            center: None,
         }
     }
 }
@@ -95,7 +102,8 @@ impl WinOptions {
 pub struct WinState {
     pub register_win_types: HashMap<String, WinOptions>,
     pub open_wins: Vec<String>,
-    pub hide_wins: Vec<String>
+    pub hide_wins: Vec<String>,
+    _marker: PhantomPinned,
 }
 
 unsafe impl Send for WinState {}
@@ -105,16 +113,23 @@ impl WinState {
     pub fn new() -> Self {
         Self {
             register_win_types: HashMap::new(),
-            open_wins: vec![] ,
-            hide_wins: vec![]
+            open_wins: vec![],
+            hide_wins: vec![],
+            _marker: PhantomPinned,
         }
     }
 
     fn is_open(&self, label: &str) -> bool {
-        self.open_wins.iter().find(|&win| {*win == label.to_string()}).is_some()
+        self.open_wins
+            .iter()
+            .find(|&win| *win == label.to_string())
+            .is_some()
     }
     fn is_hide(&self, label: &str) -> bool {
-        self.hide_wins.iter().find(|&win| {*win == label.to_string()}).is_some()
+        self.hide_wins
+            .iter()
+            .find(|&win| *win == label.to_string())
+            .is_some()
     }
     fn is_register(&self, win_type: &str) -> bool {
         self.register_win_types.get(win_type).is_some()
@@ -124,48 +139,60 @@ impl WinState {
         self.register_win_types.get(win_type)
     }
 
-    pub fn register(&mut self, options: WinOptions)-> Result<(), WinError> {
+    pub fn register(&mut self, options: WinOptions) -> Result<(), WinError> {
         if self.is_register(&options.win_type) {
-            return Err(WinError::AlreadyExist(format!("Win type {}", &options.win_type)))
+            return Err(WinError::AlreadyExist(format!(
+                "Win type {}",
+                &options.win_type
+            )));
         }
-        self.register_win_types.insert(options.win_type.clone(), options);
+        self.register_win_types
+            .insert(options.win_type.clone(), options);
         Ok(())
     }
 
-    pub fn open(&mut self, label: &str)-> Result<(), WinError> {
+    pub fn open(&mut self, label: &str) -> Result<(), WinError> {
         if self.is_open(label) {
             return Err(WinError::AlreadyOpen(label.to_string()));
         }
         if self.is_hide(label) {
-            self.hide_wins.retain(|x| {*x != label})
+            self.hide_wins.retain(|x| *x != label)
         }
         self.open_wins.push(label.to_string());
         Ok(())
     }
 
-    pub fn hide(&mut self, label: &str)-> Result<(), WinError> {
+    pub fn hide(&mut self, label: &str) -> Result<(), WinError> {
         if self.is_hide(label) {
             return Err(WinError::AlreadyHide(label.to_string()));
         }
         if self.is_open(label) {
-            self.open_wins.retain(|x| {*x != label})
+            self.open_wins.retain(|x| *x != label)
         }
         self.hide_wins.push(label.to_string());
         Ok(())
     }
 
-    pub fn close(&mut self, label: &str)-> Result<(), WinError> {
+    pub fn close(&mut self, label: &str) -> Result<(), WinError> {
         if self.is_hide(label) {
-            self.hide_wins.retain(|x| {*x != label})
+            self.hide_wins.retain(|x| *x != label)
         }
         if self.is_open(label) {
-            self.open_wins.retain(|x| {*x != label})
+            self.open_wins.retain(|x| *x != label)
         }
         Ok(())
     }
+
+
 }
 
-fn new_window<R: Runtime>(app: &AppHandle<R>, open: &str, label: &str ,options: &WinOptions, args: HashMap<String, Value>) -> Result<(), WinError> {
+fn new_window<R: Runtime>(
+    app: &AppHandle<R>,
+    open: &str,
+    label: &str,
+    options: &WinOptions,
+    args: HashMap<String, Value>,
+) -> Result<(), WinError> {
     let mut window = tauri::WindowBuilder::new(
         app,
         label, /* the unique window label */
@@ -219,21 +246,32 @@ fn new_window<R: Runtime>(app: &AppHandle<R>, open: &str, label: &str ,options: 
         }
     }
 
-    let window = window.build()
-        .or_else(|error| {
-        println!("{}", error.to_string());
-        Err(WinError::OpenWindowFail(label.to_string(), "win build error".to_string()))
+    let window = window.build().or_else(|error| {
+        error!("{} build error: {} ", label.to_string(), error);
+        Err(WinError::OpenWindowFail(
+            label.to_string(),
+            "win build error".to_string(),
+        ))
     })?;
 
     window.show().or_else(|error| {
-        println!("{}", error.to_string());
-        Err(WinError::OpenWindowFail(label.to_string(), "win build error".to_string()))
+        error!("{} build error: {} ", label.to_string(), error);
+        Err(WinError::OpenWindowFail(
+            label.to_string(),
+            "win build error".to_string(),
+        ))
     })?;
     Ok(())
 }
 
 #[tauri::command]
-async fn open<R: Runtime>(app: AppHandle<R>, win: Window<R>, label: &str, args: HashMap<String, Value>, win_state: State<'_, Mutex<WinState>>) -> Result<String, WinError> {
+async fn open<R: Runtime>(
+    app: AppHandle<R>,
+    win: Window<R>,
+    label: &str,
+    args: HashMap<String, Value>,
+    win_state: State<'_, Arc<Mutex<WinState>>>,
+) -> Result<String, WinError> {
     // 如果 label 在注册中 则新建一个窗口，并且返回id
     // 如果是已经打开的页面 则直接打开
     let mut win_state = win_state.lock().await;
@@ -252,8 +290,11 @@ async fn open<R: Runtime>(app: AppHandle<R>, win: Window<R>, label: &str, args: 
 
     if let Some(twin) = app.get_window(label) {
         twin.emit("open", NArgs::new(win.label(), args))
-        .or_else(|_| {
-             Err(WinError::OpenWindowFail(label.to_string(), "args error".to_string()))
+            .or_else(|_| {
+                Err(WinError::OpenWindowFail(
+                    label.to_string(),
+                    "args error".to_string(),
+                ))
             })?;
         win_state.open(label)?;
     } else {
@@ -264,19 +305,30 @@ async fn open<R: Runtime>(app: AppHandle<R>, win: Window<R>, label: &str, args: 
 }
 
 #[tauri::command]
-async fn close<R: Runtime>(app: AppHandle<R>, win: Window<R>, win_state: State<'_, Mutex<WinState>>, label: &str) -> Result<(), WinError> {
+async fn close<R: Runtime>(
+    app: AppHandle<R>,
+    win: Window<R>,
+    win_state: State<'_, Arc<Mutex<WinState>>>,
+    label: &str,
+) -> Result<(), WinError> {
     let mut win_state = win_state.lock().await;
     if label == "" {
         win.close().or_else(|error| {
             println!("{}", error.to_string());
-            Err(WinError::CloseWindowFail(win.label().to_string(), error.to_string()))
+            Err(WinError::CloseWindowFail(
+                win.label().to_string(),
+                error.to_string(),
+            ))
         })?;
         win_state.close(win.label())?;
     } else {
         if let Some(twin) = app.get_window(label) {
             twin.close().or_else(|error| {
                 println!("{}", error.to_string());
-                Err(WinError::CloseWindowFail(label.to_string(), error.to_string()))
+                Err(WinError::CloseWindowFail(
+                    label.to_string(),
+                    error.to_string(),
+                ))
             })?;
             // 从win_state 中删除
             win_state.close(label)?;
@@ -286,29 +338,47 @@ async fn close<R: Runtime>(app: AppHandle<R>, win: Window<R>, win_state: State<'
 }
 
 #[tauri::command]
-async fn hide<R: Runtime>(app: AppHandle<R>, win: Window<R>, win_state: State<'_, Mutex<WinState>>, label: &str) -> Result<(), WinError> {
+async fn hide<R: Runtime>(
+    app: AppHandle<R>,
+    win: Window<R>,
+    win_state: State<'_, Arc<Mutex<WinState>>>,
+    label: &str,
+) -> Result<(), WinError> {
     let mut win_state = win_state.lock().await;
     if label == "" {
         if win_state.is_hide(win.label()) {
-            return  Err(WinError::HideWindowFail(win.label().to_string(), "already hide".to_string()));
+            return Err(WinError::HideWindowFail(
+                win.label().to_string(),
+                "already hide".to_string(),
+            ));
         }
         win.hide().or_else(|error| {
             println!("{}", error.to_string());
-            Err(WinError::HideWindowFail(win.label().to_string(), error.to_string()))
+            Err(WinError::HideWindowFail(
+                win.label().to_string(),
+                error.to_string(),
+            ))
         })?;
         win_state.hide(win.label())?;
     } else {
         if win_state.is_hide(win.label()) {
-            return  Err(WinError::HideWindowFail(label.to_string(), "already hide".to_string()));
+            return Err(WinError::HideWindowFail(
+                label.to_string(),
+                "already hide".to_string(),
+            ));
         }
         if let Some(twin) = app.get_window(label) {
             twin.hide().or_else(|error| {
                 println!("{}", error.to_string());
-                Err(WinError::HideWindowFail(label.to_string(), error.to_string()))
+                Err(WinError::HideWindowFail(
+                    label.to_string(),
+                    error.to_string(),
+                ))
             })?;
             // 从win_state 中删除
             win_state.hide(label)?;
-        } {
+        }
+        {
             panic!("错误, hide 已经关闭的窗口")
         }
     }
@@ -317,17 +387,20 @@ async fn hide<R: Runtime>(app: AppHandle<R>, win: Window<R>, win_state: State<'_
 
 pub struct NWindowsPlugin<R: Runtime> {
     invoke_handler: Box<dyn Fn(Invoke<R>) + Send + Sync>,
-    // ma
-    // plugin state, configuration fields
+    win_state: Arc<Mutex<WinState>>
 }
+
+unsafe impl<R: Runtime> Send for NWindowsPlugin<R> {}
+unsafe impl<R: Runtime> Sync for NWindowsPlugin<R> {}
 
 impl<R: Runtime> NWindowsPlugin<R> {
     // you can add configuration fields here,·
     // see https://doc.rust-lang.org/1.0.0/style/ownership/builders.html
     pub fn new() -> Self {
-      Self {
-        invoke_handler: Box::new(tauri::generate_handler![open, close, hide]),
-      }
+        Self {
+            invoke_handler: Box::new(tauri::generate_handler![open, close, hide]),
+            win_state: Arc::new(Mutex::new(WinState::new()))
+        }
     }
 }
 
@@ -335,14 +408,72 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
     fn name(&self) -> &'static str {
         "win"
     }
+
     fn initialize(&mut self, app: &AppHandle<R>, config: Value) -> tauri::plugin::Result<()> {
         let config: Vec<WinOptions> = serde_json::from_value(config)?;
-        let mut winstate = WinState::new();
-        config.iter().for_each(|options| { winstate.register(options.clone()).expect("请页面配置"); });
-        winstate.open("main").unwrap();
-        app.manage(Mutex::new(winstate));
+        info!("Page Config {:?}", config);
+
+        config.iter().for_each(|options| {
+            self.win_state.blocking_lock().register(options.clone()).expect("请页面配置");
+        });
+
+        
+        app.manage(self.win_state.clone());
+        info!("load success");
         Ok(())
     }
+
+    fn initialization_script(&self) -> Option<String> {
+    None
+  }
+
+    fn created(&mut self, window: Window<R>) {
+        info!("create {}", window.label())
+    }
+
+    fn on_page_load(&mut self, window: Window<R>, payload: tauri::PageLoadPayload) {
+        
+    }
+
+    fn on_event(&mut self, app: &AppHandle<R>, event: &tauri::RunEvent) {
+        match event {
+            tauri::RunEvent::Exit => {
+                info!("Application EXIT")
+            },
+            tauri::RunEvent::WindowEvent { label, event , .. } => {
+                
+            },
+            tauri::RunEvent::Ready => {
+                info!("Application ready");
+                let options = self.win_state
+                    .blocking_lock()
+                    .get_options_by_type("main")
+                    .expect("not found main page")
+                    .clone();
+                let handle = app.app_handle();
+                std::thread::spawn(move || {
+                    new_window(
+                        &handle,
+                         "", 
+                         &options.win_type, 
+                         &options, 
+                         HashMap::new()
+                    ).expect("open first page error");
+                    let c_win_state: State<'_, Arc<Mutex<WinState>>> = handle.state();
+                    c_win_state.blocking_lock().open("main").expect("open first page error");
+                    info!("open main success")
+                });
+            },
+            tauri::RunEvent::Resumed => {
+
+            },
+            tauri::RunEvent::MainEventsCleared => {
+
+            },
+            _ => {},
+        }
+    }
+
     fn extend_api(&mut self, message: Invoke<R>) {
         (self.invoke_handler)(message)
     }

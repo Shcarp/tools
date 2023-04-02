@@ -34,16 +34,7 @@
     },
     "updater": {
       "active": false
-    },
-    "windows": [
-      {
-        "fullscreen": false,
-        "resizable": true,
-        "title": "notes",
-        "width": 1200,
-        "height": 800
-      }
-    ]
+    }
   },
   "plugins": {
     "win": [
