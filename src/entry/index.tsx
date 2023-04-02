@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { appWindow } from '@tauri-apps/api/window'
 import type { PageCommonProps } from '../page/interface'
-import '../page/index'
 
 export function run<T>(Entry: React.FC<T & PageCommonProps>) {
   const Wrap = () => {

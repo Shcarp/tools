@@ -337,7 +337,6 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
     }
     fn initialize(&mut self, app: &AppHandle<R>, config: Value) -> tauri::plugin::Result<()> {
         let config: Vec<WinOptions> = serde_json::from_value(config)?;
-        println!("{:?}", config);
         let mut winstate = WinState::new();
         config.iter().for_each(|options| { winstate.register(options.clone()).expect("请页面配置"); });
         winstate.open("main").unwrap();

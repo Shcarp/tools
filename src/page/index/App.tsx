@@ -2,7 +2,7 @@ import React from 'react'
 import { Button } from 'antd'
 import { client } from '../../rpc'
 import type { PageCommonProps } from '../interface'
-import { open } from '../../utils'
+import { info, error } from 'tauri-plugin-log-api'
 import 'antd/dist/reset.css'
 import './App.less'
 import win from '../../win'
@@ -17,7 +17,8 @@ export interface IAppProps {
 }
 
 function App(props: IAppProps & PageCommonProps) {
-  console.log(props)
+  info(JSON.stringify(props), {file: "/log"})
+  error(JSON.stringify(props))
   const getTest = async () => {
     const res = await client.get<TestRemoteObj>('test')
     console.log(await res.height())

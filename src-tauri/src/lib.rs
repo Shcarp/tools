@@ -2,11 +2,13 @@ pub mod rpc;
 pub mod command;
 pub mod plugin;
 
+use log::LevelFilter;
 use rpc::{NServer, NResponse, NService};
 use tauri::{ Wry };
 use crate::command::{greet, recive_message};
 pub use crate::win::{WinState, WinOptions};
 use plugin::win;
+use tauri_plugin_log::{LogTarget};
 
 const JUDAGE_SERVICE: &str = "JUDAGE_SERVICE";
 
@@ -43,6 +45,16 @@ impl NApp {
 
         let builder = tauri::Builder::default()
             .plugin(win::NWindowsPlugin::new())
+            .plugin(tauri_plugin_log::Builder::default().targets([
+                LogTarget::LogDir,
+                LogTarget::Stdout,
+                LogTarget::Webview,
+                LogTarget::Folder("log".into())
+            ]).level(LevelFilter::Warn).build())
+            .setup(|app_handle| {
+                let path = app_handle.path_resolver().app_log_dir().unwrap();
+                Ok(())
+            })
             .manage(server)
             .invoke_handler(tauri::generate_handler![greet, recive_message]);
         NApp { builder }
