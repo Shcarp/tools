@@ -17,8 +17,4 @@ const Edit: React.FC<IEditProps & PageCommonProps> = (props) => {
     );
 };
 
-win.register({
-    win_type: "edit",
-    url: "edit.html",
-});
 run<IEditProps>(Edit);

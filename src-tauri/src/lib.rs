@@ -1,11 +1,12 @@
 pub mod rpc;
 pub mod command;
-pub mod win;
+pub mod plugin;
 
 use rpc::{NServer, NResponse, NService};
-use tauri::{ Wry, async_runtime::Mutex, Manager };
+use tauri::{ Wry };
 use crate::command::{greet, recive_message};
-pub use crate::win::{open, WinState, WinOptions};
+pub use crate::win::{WinState, WinOptions};
+use plugin::win;
 
 const JUDAGE_SERVICE: &str = "JUDAGE_SERVICE";
 
@@ -41,16 +42,9 @@ impl NApp {
         server.register_services("test", Box::new(TestRpc {width: 30, height: 40}));
 
         let builder = tauri::Builder::default()
-            .setup(|app| {
-
-                // app.listen_global("", |event| {
-                //     println!("got event-name with payload {:?}", event.payload());
-                //   });
-
-                Ok(())
-            })
+            .plugin(win::NWindowsPlugin::new())
             .manage(server)
-            .invoke_handler(tauri::generate_handler![greet, recive_message, open]);
+            .invoke_handler(tauri::generate_handler![greet, recive_message]);
         NApp { builder }
     }
 
@@ -62,19 +56,6 @@ impl NApp {
                 tauri::RunEvent::ExitRequested { api, .. } => {
                     api.prevent_exit();
                 }
-                // tauri::RunEvent::WindowEvent { label, event, .. } => {
-                //     match event {
-                //         tauri::WindowEvent::Resized(_) => todo!(),
-                //         tauri::WindowEvent::Moved(_) => todo!(),
-                //         tauri::WindowEvent::CloseRequested { api , .. } => todo!(),
-                //         tauri::WindowEvent::Destroyed => todo!(),
-                //         tauri::WindowEvent::Focused(_) => todo!(),
-                //         tauri::WindowEvent::ScaleFactorChanged { scale_factor, new_inner_size , .. } => todo!(),
-                //         tauri::WindowEvent::FileDrop(_) => todo!(),
-                //         tauri::WindowEvent::ThemeChanged(_) => todo!(),
-                //         _ => todo!(),
-                //     }
-                // }
                 _ => {}
             });
     }
@@ -88,9 +69,5 @@ impl NApp {
 }
 
 pub fn lmian() {
-    let mut winstate = WinState::new();
-    winstate.register(WinOptions::new(String::from("main"), String::from("index.html"))).unwrap();
-    winstate.register(WinOptions::new(String::from("edit"), String::from("edit.html"))).unwrap();
-    winstate.open("main");
-    NApp::new().register_module(Mutex::new(winstate)).run()
+    NApp::new().run()
 }

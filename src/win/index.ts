@@ -27,23 +27,14 @@ type Value = string | null | boolean | number | Array<Value> | Object;
 
 export interface WinInterface {
     open: (label: string, args: WinOptions) => Promise<string>;
-    register: (options: WinOptions) => Promise<void>;
     close: (label: string) => Promise<void>;
     hide: (label: string) => Promise<void>;
 }
 
 class Win implements WinInterface {
-    async register(options: WinOptions): Promise<void> {
-        try {
-            await invoke('register_win', {options})
-        } catch (error) {
-            console.log(error)
-        }
-    }
-
     async close(label: string): Promise<void> {
         try {
-            await invoke('register_win', {label})
+            await invoke('plugin:win|close', {label})
         } catch (error) {
             console.log(error)
         }
@@ -51,7 +42,7 @@ class Win implements WinInterface {
 
     async hide(label: string): Promise<void> {
         try {
-            await invoke('register_win', {label})
+            await invoke('plugin:win|hide', {label})
         } catch (error) {
             console.log(error)
         }
@@ -59,7 +50,7 @@ class Win implements WinInterface {
 
     async open(label: string, args: Record<string, any>): Promise<string> {
         try {
-            const newWinLabel = await invoke('open', { label: label, args })
+            const newWinLabel = await invoke('plugin:win|open', { label: label, args })
             return newWinLabel as string
         } catch (error) {
             console.log(error)

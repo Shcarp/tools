@@ -45,5 +45,16 @@
         "height": 800
       }
     ]
+  },
+  "plugins": {
+    "win": [
+      {
+        "win_type": "main",
+        "url": "index.html"
+      },{
+        "win_type": "edit",
+        "url": "edit.html"
+      }
+    ]
   }
 }
