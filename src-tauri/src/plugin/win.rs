@@ -1,3 +1,5 @@
+// #![feature(rdev)]
+
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -7,6 +9,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{collections::HashMap, fmt::Display};
 use tauri::async_runtime::Mutex;
 use tauri::{plugin::Plugin, AppHandle, Invoke, Manager, Runtime, State, Window};
+use rdev::{grab};
 
 static WIN_COUNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -416,9 +419,44 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
         config.iter().for_each(|options| {
             self.win_state.blocking_lock().register(options.clone()).expect("请页面配置");
         });
-
-        
         app.manage(self.win_state.clone());
+
+        tauri::async_runtime::spawn(async move {
+            rdev::grab(move |event| {
+                let is_block: bool = match event.event_type {
+                    rdev::EventType::KeyPress(key) => {
+                        match key {
+                            rdev::Key::Alt => {
+                                info!("按了{:?} ALT ALT", key);
+                                true
+                            },
+                            rdev::Key::KeyU => {
+                                info!("按了{:?} UUUUUUU", key);
+                                true
+                            },
+                            _ => {
+                                info!("{:?}", key);
+                                false
+                            }
+                        }
+                    },
+                    rdev::EventType::MouseMove { x, y } => {
+                        info!("x:{}, y: {}", x, y);
+                        false
+                    }
+                    _ => {
+                        info!("啥也没有");
+                        false
+                    },
+                };
+                if is_block {
+                    None
+                } else {
+                    Some(event)
+                }
+            })
+        });
+
         info!("load success");
         Ok(())
     }
@@ -443,27 +481,27 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
             tauri::RunEvent::WindowEvent { label, event , .. } => {
                 
             },
-            tauri::RunEvent::Ready => {
-                info!("Application ready");
-                let options = self.win_state
-                    .blocking_lock()
-                    .get_options_by_type("main")
-                    .expect("not found main page")
-                    .clone();
-                let handle = app.app_handle();
-                std::thread::spawn(move || {
-                    new_window(
-                        &handle,
-                         "", 
-                         &options.win_type, 
-                         &options, 
-                         HashMap::new()
-                    ).expect("open first page error");
-                    let c_win_state: State<'_, Arc<Mutex<WinState>>> = handle.state();
-                    c_win_state.blocking_lock().open("main").expect("open first page error");
-                    info!("open main success")
-                });
-            },
+            // tauri::RunEvent::Ready => {
+            //     info!("Application ready");
+            //     let options = self.win_state
+            //         .blocking_lock()
+            //         .get_options_by_type("main")
+            //         .expect("not found main page")
+            //         .clone();
+            //     let handle = app.app_handle();
+            //     std::thread::spawn(move || {
+            //         new_window(
+            //             &handle,
+            //              "", 
+            //              &options.win_type, 
+            //              &options, 
+            //              HashMap::new()
+            //         ).expect("open first page error");
+            //         let c_win_state: State<'_, Arc<Mutex<WinState>>> = handle.state();
+            //         c_win_state.blocking_lock().open("main").expect("open first page error");
+            //         info!("open main success")
+            //     });
+            // },
             tauri::RunEvent::Resumed => {
 
             },
