@@ -1,4 +1,9 @@
-// #![feature(rdev)]
+#[cfg(target_os="windows")]
+use rdev::{grab};
+#[cfg(target_os="macos")]
+use crate::utils::mac_keyboard_event;
+#[cfg(target_os="macos")]
+use core_graphics::event::EventField;
 
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -9,7 +14,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::{collections::HashMap, fmt::Display};
 use tauri::async_runtime::Mutex;
 use tauri::{plugin::Plugin, AppHandle, Invoke, Manager, Runtime, State, Window};
-use rdev::{grab};
+
 
 static WIN_COUNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -420,7 +425,7 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
             self.win_state.blocking_lock().register(options.clone()).expect("请页面配置");
         });
         app.manage(self.win_state.clone());
-
+        #[cfg(target_os="windows")]
         tauri::async_runtime::spawn(async move {
             rdev::grab(move |event| {
                 let is_block: bool = match event.event_type {
@@ -456,7 +461,11 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
                 }
             })
         });
-
+        #[cfg(target_os="macos")]
+        mac_keyboard_event(|event| {
+            println!("{:?}", event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE));
+            println!("{:?}", event.get_flags());
+        });
         info!("load success");
         Ok(())
     }
@@ -516,3 +525,4 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
         (self.invoke_handler)(message)
     }
 }
+

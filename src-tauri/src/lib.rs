@@ -1,6 +1,7 @@
 pub mod rpc;
 pub mod command;
 pub mod plugin;
+pub mod utils;
 
 use log::LevelFilter;
 use rpc::{NServer, NResponse, NService};
@@ -45,7 +46,7 @@ impl NApp {
 
         let builder = tauri::Builder::default()
             .plugin(tauri_plugin_log::Builder::default().targets([
-                LogTarget::LogDir,
+                // LogTarget::LogDir,
                 LogTarget::Stdout,
                 LogTarget::Webview,
                 LogTarget::Folder("log".into())
@@ -65,7 +66,7 @@ impl NApp {
             .build(tauri::generate_context!())
             .unwrap()
             .run(|_app_handle, event | match event {
-                tauri::RunEvent::ExitRequested { api, .. } => {
+                tauri::RunEvent::ExitRequested { api, .. } => { 
                     api.prevent_exit();
                 },
                 _ => {}

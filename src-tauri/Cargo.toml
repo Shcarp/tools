@@ -24,6 +24,8 @@ fern = "0.6"
 time = { version = "0.3", features = ["formatting", "local-offset"] }
 ncurses = "5.101.0"
 rdev = { version = "0.5.2", features = ["unstable_grab"] }
+core-foundation = "0.9.1"
+core-graphics = "0.22.3"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
