@@ -7,7 +7,7 @@
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "notes",
+    "productName": "tools",
     "version": "0.0.0"
   },
   "tauri": {
