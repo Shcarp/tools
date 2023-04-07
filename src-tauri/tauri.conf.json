@@ -43,7 +43,8 @@
         "url": "index.html"
       },{
         "win_type": "edit",
-        "url": "edit.html"
+        "url": "edit.html",
+        "overopen": true
       }
     ]
   }

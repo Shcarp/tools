@@ -29,6 +29,7 @@ thiserror = "1.0.40"
 itertools = "0.10.5"
 log = "^0.4"
 fern = "0.6"
+tokio = "1.27.0"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

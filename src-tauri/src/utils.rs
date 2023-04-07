@@ -2,22 +2,22 @@
 use core_foundation::runloop::{CFRunLoop, kCFRunLoopCommonModes};
 #[cfg(target_os="macos")]
 use core_graphics::{
-    event::{CGEvent, CGEventTapLocation, CGEventType, EventField},
-    event::{CGEventTap, CGEventTapOptions, CGEventTapPlacement, CGEventTapProxy},
+    event::{CGEvent, CGEventTapLocation, CGEventType},
+    event::{CGEventTap, CGEventTapOptions, CGEventTapPlacement},
 };
 
 
 #[cfg(target_os="macos")]
-pub fn mac_keyboard_event<T>(callback: T) where T: Fn(&CGEvent) {  
-    let event_tap_options = CGEventTapOptions::Default;
-    let event_tap_location = CGEventTapLocation::HID;
-    let event_tap_placement = CGEventTapPlacement::HeadInsertEventTap;
+pub fn mac_keyboard_event<T>(eventType: Vec<CGEventType>, callback: T) 
+    where T: Fn(&CGEvent)
+{      
     let current = CFRunLoop::get_current();
+
     let event_tap = CGEventTap::new(
-        event_tap_location,
-        event_tap_placement,
-        event_tap_options,
-        vec![CGEventType::KeyDown, CGEventType::KeyUp],
+        CGEventTapLocation::HID,
+        CGEventTapPlacement::HeadInsertEventTap,
+        CGEventTapOptions::Default,
+        eventType,
         |_a, _b, d| {
             callback(&d);
             None
@@ -33,6 +33,6 @@ pub fn mac_keyboard_event<T>(callback: T) where T: Fn(&CGEvent) {
             tap.enable();
             CFRunLoop::run_current();
         },
-        Err(_) => (assert!(false)),
+        Err(_) => assert!(false),
     };
 }

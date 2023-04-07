@@ -3218,6 +3218,7 @@ dependencies = [
  "tauri-plugin-log",
  "thiserror",
  "time",
+ "tokio",
 ]
 
 [[package]]

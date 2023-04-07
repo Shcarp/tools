@@ -6,6 +6,7 @@ import { info, error } from 'tauri-plugin-log-api'
 import 'antd/dist/reset.css'
 import './App.less'
 import win from '../../win'
+import { appWindow } from '@tauri-apps/api/window'
 
 interface TestRemoteObj {
   height: () => Promise<number>
@@ -19,6 +20,9 @@ export interface IAppProps {
 function App(props: IAppProps & PageCommonProps) {
   info(JSON.stringify(props), {file: "/log"})
   error(JSON.stringify(props))
+  appWindow.listen("show", (event) => {
+    console.log(event)
+  })
   const getTest = async () => {
     const res = await client.get<TestRemoteObj>('test')
     console.log(await res.height())
@@ -32,7 +36,7 @@ function App(props: IAppProps & PageCommonProps) {
       <Button onClick={async () => {
         win.open('edit', { id: 'edit' })
       }}>
-        Open ediyt
+        Open edit
       </Button>
     </div>
   )

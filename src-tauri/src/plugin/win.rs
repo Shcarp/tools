@@ -1,20 +1,19 @@
-#[cfg(target_os="windows")]
-use rdev::{grab};
-#[cfg(target_os="macos")]
+#[cfg(target_os = "macos")]
 use crate::utils::mac_keyboard_event;
-#[cfg(target_os="macos")]
-use core_graphics::event::EventField;
+#[cfg(target_os = "macos")]
+use core_graphics::event::{CGEventFlags, CGEventType, EventField};
+#[cfg(target_os = "windows")]
+use rdev::grab;
 
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::marker::PhantomPinned;
-use std::sync::{Arc};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+use std::vec;
 use std::{collections::HashMap, fmt::Display};
-use tauri::async_runtime::Mutex;
 use tauri::{plugin::Plugin, AppHandle, Invoke, Manager, Runtime, State, Window};
-
 
 static WIN_COUNT: AtomicUsize = AtomicUsize::new(0);
 
@@ -109,8 +108,6 @@ impl WinOptions {
 #[derive(Debug)]
 pub struct WinState {
     pub register_win_types: HashMap<String, WinOptions>,
-    pub open_wins: Vec<String>,
-    pub hide_wins: Vec<String>,
     _marker: PhantomPinned,
 }
 
@@ -121,30 +118,16 @@ impl WinState {
     pub fn new() -> Self {
         Self {
             register_win_types: HashMap::new(),
-            open_wins: vec![],
-            hide_wins: vec![],
             _marker: PhantomPinned,
         }
     }
 
-    fn is_open(&self, label: &str) -> bool {
-        self.open_wins
-            .iter()
-            .find(|&win| *win == label.to_string())
-            .is_some()
-    }
-    fn is_hide(&self, label: &str) -> bool {
-        self.hide_wins
-            .iter()
-            .find(|&win| *win == label.to_string())
-            .is_some()
-    }
-    fn is_register(&self, win_type: &str) -> bool {
-        self.register_win_types.get(win_type).is_some()
-    }
-
     pub fn get_options_by_type(&self, win_type: &str) -> Option<&WinOptions> {
         self.register_win_types.get(win_type)
+    }
+
+    pub fn is_register(&self, win_type: &str) -> bool {
+        self.register_win_types.get(win_type).is_some()
     }
 
     pub fn register(&mut self, options: WinOptions) -> Result<(), WinError> {
@@ -158,54 +141,22 @@ impl WinState {
             .insert(options.win_type.clone(), options);
         Ok(())
     }
-
-    pub fn open(&mut self, label: &str) -> Result<(), WinError> {
-        if self.is_open(label) {
-            return Err(WinError::AlreadyOpen(label.to_string()));
-        }
-        if self.is_hide(label) {
-            self.hide_wins.retain(|x| *x != label)
-        }
-        self.open_wins.push(label.to_string());
-        Ok(())
-    }
-
-    pub fn hide(&mut self, label: &str) -> Result<(), WinError> {
-        if self.is_hide(label) {
-            return Err(WinError::AlreadyHide(label.to_string()));
-        }
-        if self.is_open(label) {
-            self.open_wins.retain(|x| *x != label)
-        }
-        self.hide_wins.push(label.to_string());
-        Ok(())
-    }
-
-    pub fn close(&mut self, label: &str) -> Result<(), WinError> {
-        if self.is_hide(label) {
-            self.hide_wins.retain(|x| *x != label)
-        }
-        if self.is_open(label) {
-            self.open_wins.retain(|x| *x != label)
-        }
-        Ok(())
-    }
-
-
 }
 
-fn new_window<R: Runtime>(
+pub fn creator_new_window<R: Runtime>(
     app: &AppHandle<R>,
     open: &str,
     label: &str,
     options: &WinOptions,
     args: HashMap<String, Value>,
-) -> Result<(), WinError> {
+) -> Result<Window<R>, WinError> {
     let mut window = tauri::WindowBuilder::new(
         app,
         label, /* the unique window label */
         tauri::WindowUrl::App(options.url.to_owned().into())
-    ).initialization_script(
+    )
+    .visible(false)
+    .initialization_script(
         format!(
             r#"
                 if (window.location.origin === 'http://localhost:1420' || window.location.origin === '') {{
@@ -261,15 +212,7 @@ fn new_window<R: Runtime>(
             "win build error".to_string(),
         ))
     })?;
-
-    window.show().or_else(|error| {
-        error!("{} build error: {} ", label.to_string(), error);
-        Err(WinError::OpenWindowFail(
-            label.to_string(),
-            "win build error".to_string(),
-        ))
-    })?;
-    Ok(())
+    Ok(window)
 }
 
 #[tauri::command]
@@ -280,9 +223,10 @@ async fn open<R: Runtime>(
     args: HashMap<String, Value>,
     win_state: State<'_, Arc<Mutex<WinState>>>,
 ) -> Result<String, WinError> {
+    
+    let win_state = win_state.lock().expect("mutex poisoned");
     // 如果 label 在注册中 则新建一个窗口，并且返回id
     // 如果是已经打开的页面 则直接打开
-    let mut win_state = win_state.lock().await;
     if !win_state.is_register(label) {
         return Err(WinError::NotRegister(label.to_string()));
     }
@@ -290,8 +234,15 @@ async fn open<R: Runtime>(
     if let Some(ref value) = options.overopen {
         if *value {
             let win_label = format!("{}_{}", label, WIN_COUNT.fetch_add(1, Ordering::Relaxed));
-            new_window(&app, win.label(), &win_label, options, args)?;
-            win_state.open(label)?;
+            creator_new_window(&app, win.label(), &win_label, options, args)?
+                .show()
+                .or_else(|error| {
+                    error!("{} build error: {} ", label.to_string(), error);
+                    Err(WinError::OpenWindowFail(
+                        label.to_string(),
+                        "win build error".to_string(),
+                    ))
+                })?;
             return Ok(win_label);
         }
     }
@@ -304,98 +255,33 @@ async fn open<R: Runtime>(
                     "args error".to_string(),
                 ))
             })?;
-        win_state.open(label)?;
     } else {
-        new_window(&app, win.label(), label, options, args)?;
-        win_state.open(label)?;
+        creator_new_window(&app, win.label(), label, options, args)?
+            .show()
+            .or_else(|error| {
+                error!("{} build error: {} ", label.to_string(), error);
+                Err(WinError::OpenWindowFail(
+                    label.to_string(),
+                    "win build error".to_string(),
+                ))
+            })?;
     }
     return Ok(label.to_string());
 }
 
 #[tauri::command]
-async fn close<R: Runtime>(
-    app: AppHandle<R>,
-    win: Window<R>,
-    win_state: State<'_, Arc<Mutex<WinState>>>,
-    label: &str,
-) -> Result<(), WinError> {
-    let mut win_state = win_state.lock().await;
-    if label == "" {
-        win.close().or_else(|error| {
-            println!("{}", error.to_string());
-            Err(WinError::CloseWindowFail(
-                win.label().to_string(),
-                error.to_string(),
-            ))
-        })?;
-        win_state.close(win.label())?;
-    } else {
-        if let Some(twin) = app.get_window(label) {
-            twin.close().or_else(|error| {
-                println!("{}", error.to_string());
-                Err(WinError::CloseWindowFail(
-                    label.to_string(),
-                    error.to_string(),
-                ))
-            })?;
-            // 从win_state 中删除
-            win_state.close(label)?;
-        }
+async fn register_page(win_state: State<'_, Arc<Mutex<WinState>>>, options: WinOptions) -> Result<(), WinError> {
+    let mut win_state = win_state.lock().expect("mutex poisoned");
+    if win_state.is_register(&options.win_type) {
+        return Err(WinError::AlreadyExist(options.win_type));
     }
-    Ok(())
-}
-
-#[tauri::command]
-async fn hide<R: Runtime>(
-    app: AppHandle<R>,
-    win: Window<R>,
-    win_state: State<'_, Arc<Mutex<WinState>>>,
-    label: &str,
-) -> Result<(), WinError> {
-    let mut win_state = win_state.lock().await;
-    if label == "" {
-        if win_state.is_hide(win.label()) {
-            return Err(WinError::HideWindowFail(
-                win.label().to_string(),
-                "already hide".to_string(),
-            ));
-        }
-        win.hide().or_else(|error| {
-            println!("{}", error.to_string());
-            Err(WinError::HideWindowFail(
-                win.label().to_string(),
-                error.to_string(),
-            ))
-        })?;
-        win_state.hide(win.label())?;
-    } else {
-        if win_state.is_hide(win.label()) {
-            return Err(WinError::HideWindowFail(
-                label.to_string(),
-                "already hide".to_string(),
-            ));
-        }
-        if let Some(twin) = app.get_window(label) {
-            twin.hide().or_else(|error| {
-                println!("{}", error.to_string());
-                Err(WinError::HideWindowFail(
-                    label.to_string(),
-                    error.to_string(),
-                ))
-            })?;
-            // 从win_state 中删除
-            win_state.hide(label)?;
-        }
-        {
-            panic!("错误, hide 已经关闭的窗口")
-        }
-    }
+    win_state.register(options)?;
     Ok(())
 }
 
 pub struct NWindowsPlugin<R: Runtime> {
     invoke_handler: Box<dyn Fn(Invoke<R>) + Send + Sync>,
-    win_state: Arc<Mutex<WinState>>
+    win_state: Option<Arc<Mutex<WinState>>>,
 }
 
 unsafe impl<R: Runtime> Send for NWindowsPlugin<R> {}
@@ -406,8 +292,8 @@ impl<R: Runtime> NWindowsPlugin<R> {
     // see https://doc.rust-lang.org/1.0.0/style/ownership/builders.html
     pub fn new() -> Self {
         Self {
-            invoke_handler: Box::new(tauri::generate_handler![open, close, hide]),
-            win_state: Arc::new(Mutex::new(WinState::new()))
+            invoke_handler: Box::new(tauri::generate_handler![open, register_page]),
+            win_state: None,
         }
     }
 }
@@ -420,29 +306,33 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
     fn initialize(&mut self, app: &AppHandle<R>, config: Value) -> tauri::plugin::Result<()> {
         let config: Vec<WinOptions> = serde_json::from_value(config)?;
         info!("Page Config {:?}", config);
-
+        let mut win_state = WinState::new();
         config.iter().for_each(|options| {
-            self.win_state.blocking_lock().register(options.clone()).expect("请页面配置");
+            win_state.register(options.clone()).expect("请页面配置");
         });
-        app.manage(self.win_state.clone());
-        #[cfg(target_os="windows")]
+        let win_state = Arc::new(Mutex::new(win_state));
+        app.manage(win_state.clone());
+        self.win_state = Some(win_state);
+
+        let app_handle = app.app_handle();
+        let event_type = vec![CGEventType::KeyUp];
+
+        #[cfg(target_os = "windows")]
         tauri::async_runtime::spawn(async move {
             rdev::grab(move |event| {
                 let is_block: bool = match event.event_type {
-                    rdev::EventType::KeyPress(key) => {
-                        match key {
-                            rdev::Key::Alt => {
-                                info!("按了{:?} ALT ALT", key);
-                                true
-                            },
-                            rdev::Key::KeyU => {
-                                info!("按了{:?} UUUUUUU", key);
-                                true
-                            },
-                            _ => {
-                                info!("{:?}", key);
-                                false
-                            }
+                    rdev::EventType::KeyPress(key) => match key {
+                        rdev::Key::Alt => {
+                            info!("按了{:?} ALT ALT", key);
+                            true
+                        }
+                        rdev::Key::KeyU => {
+                            info!("按了{:?} UUUUUUU", key);
+                            true
+                        }
+                        _ => {
+                            info!("{:?}", key);
+                            false
                         }
                     },
                     rdev::EventType::MouseMove { x, y } => {
@@ -452,7 +342,7 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
                     _ => {
                         info!("啥也没有");
                         false
-                    },
+                    }
                 };
                 if is_block {
                     None
@@ -461,63 +351,47 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
                 }
             })
         });
-        #[cfg(target_os="macos")]
-        mac_keyboard_event(|event| {
-            println!("{:?}", event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE));
-            println!("{:?}", event.get_flags());
+
+        #[cfg(target_os = "macos")]
+        tauri::async_runtime::spawn(async move {
+            mac_keyboard_event(event_type, |event| {
+                let flags = event.get_flags();
+                let shortcut_key = CGEventFlags::CGEventFlagNull
+                    | CGEventFlags::CGEventFlagCommand
+                    | CGEventFlags::CGEventFlagShift
+                    | CGEventFlags::CGEventFlagNonCoalesced;
+                if (((shortcut_key.bits() | 0xa) == flags.bits())
+                    || (((shortcut_key | CGEventFlags::CGEventFlagAlphaShift).bits() | 0xa)
+                        == flags.bits()))
+                    && event.get_integer_value_field(EventField::KEYBOARD_EVENT_KEYCODE) == 35
+                {
+                    info!("main");
+                    app_handle.trigger_global("show", Some("show".to_string()))
+                }
+            });
         });
+
         info!("load success");
         Ok(())
     }
 
     fn initialization_script(&self) -> Option<String> {
-    None
-  }
+        None
+    }
 
     fn created(&mut self, window: Window<R>) {
         info!("create {}", window.label())
-    }
-
-    fn on_page_load(&mut self, window: Window<R>, payload: tauri::PageLoadPayload) {
-        
     }
 
     fn on_event(&mut self, app: &AppHandle<R>, event: &tauri::RunEvent) {
         match event {
             tauri::RunEvent::Exit => {
                 info!("Application EXIT")
-            },
-            tauri::RunEvent::WindowEvent { label, event , .. } => {
-                
-            },
-            // tauri::RunEvent::Ready => {
-            //     info!("Application ready");
-            //     let options = self.win_state
-            //         .blocking_lock()
-            //         .get_options_by_type("main")
-            //         .expect("not found main page")
-            //         .clone();
-            //     let handle = app.app_handle();
-            //     std::thread::spawn(move || {
-            //         new_window(
-            //             &handle,
-            //              "", 
-            //              &options.win_type, 
-            //              &options, 
-            //              HashMap::new()
-            //         ).expect("open first page error");
-            //         let c_win_state: State<'_, Arc<Mutex<WinState>>> = handle.state();
-            //         c_win_state.blocking_lock().open("main").expect("open first page error");
-            //         info!("open main success")
-            //     });
-            // },
-            tauri::RunEvent::Resumed => {
-
-            },
-            tauri::RunEvent::MainEventsCleared => {
-
-            },
-            _ => {},
+            }
+            tauri::RunEvent::Ready => {
+                info!("Application ready");
+            }
+            _ => {}
         }
     }
 
@@ -525,4 +399,3 @@ impl<R: Runtime> Plugin<R> for NWindowsPlugin<R> {
         (self.invoke_handler)(message)
     }
 }
-
